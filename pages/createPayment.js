@@ -1,13 +1,10 @@
-// pages/createPayment.js
-import { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import Select from 'react-select';
-import Footer from '../components/Footer';
 import Summary from '../components/Summary';
 import PaymentStatus from '../components/PaymentStatus';
+import { ClipLoader } from 'react-spinners'; // Import the ClipLoader component from react-spinners
 import { ApiService } from '../services';
 import { deviceId } from "../utils";
-// import metamask 
-
 
 const CreatePayment = () => {
   const [amount, setAmount] = useState('');
@@ -19,43 +16,34 @@ const CreatePayment = () => {
   const [amountError, setAmountError] = useState('');
   const [paymentUrl, setPaymentUrl] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [isLoading, setLoading] = useState(false); // Loading state
 
   // Fetch currencies list on component mount
   useEffect(() => {
     ApiService.getCurrenciesList(deviceId).then((data) => {
       setCurrenciesList(data);
     });
-
   }, []);
 
-  
   const handlePaymentCompletion = async (status) => {
     setPaymentStatus(status);
-  
-    // Close the summary after 5 seconds
-    const timeout = setTimeout(() => {
-      setShowSummary(false);
-      setPaymentStatus('');
-    }, 10000);
-  
-    // Clear the timeout on component unmount to prevent memory leaks
-    return () => clearTimeout(timeout);
+    setShowSummary(false);
   };
 
-
   const handleContinue = async () => {
+    setLoading(true); // Set loading to true when the button is clicked
+
     const selectedCurrencyInfo = currenciesList.find((currency) => currency.symbol === selectedCurrency);
 
     if (selectedCurrencyInfo) {
       const { min_amount, max_amount } = selectedCurrencyInfo;
-
-      // Convert amount, min_amount, and max_amount to numbers for correct comparison
       const amountNumeric = parseFloat(amount);
       const minAmountNumeric = parseFloat(min_amount);
       const maxAmountNumeric = parseFloat(max_amount);
 
       if (amountNumeric < minAmountNumeric || amountNumeric > maxAmountNumeric) {
         setAmountError(`El importe debe estar entre ${min_amount} y ${max_amount} ${selectedCurrencyInfo.symbol}`);
+        setLoading(false); // Set loading back to false
         return;
       }
     }
@@ -63,19 +51,18 @@ const CreatePayment = () => {
     setAmountError('');
 
     try {
-
       const bitnovoOrder = await ApiService.createBitnovoOrder(parseFloat(amount), selectedCurrency, concept);
-      // get identifier from bitnovoOrder
       const identifier = bitnovoOrder.identifier;
       setIdentifier(identifier);
       setPaymentStatus(bitnovoOrder.status);
       setPaymentUrl(bitnovoOrder.payment_uri);
       setShowSummary(true);
-
     } catch (error) {
       console.error('Error initiating payment:', error);
       setPaymentStatus('error');
       setShowSummary(true);
+    } finally {
+      setLoading(false); // Set loading back to false regardless of success or failure
     }
   };
 
@@ -84,7 +71,7 @@ const CreatePayment = () => {
       <Summary
         amount={amount}
         selectedCurrency={selectedCurrency}
-        commerce="Your Commerce Name"
+        commerce="Semega"
         transactionDate={new Date().toLocaleString()}
         content={concept}
         identifier={identifier}
@@ -97,11 +84,10 @@ const CreatePayment = () => {
     );
   }
 
-  // render paymentstatus component 
-  if (paymentStatus === "CO" || paymentStatus === "EX " || paymentStatus === "CA" || paymentStatus === "ER") {
+  if (paymentStatus === "CO" || paymentStatus === "EX" || paymentStatus === "CA" || paymentStatus === "ER") {
     return (
       <PaymentStatus status={paymentStatus} />
-    )
+    );
   }
 
   const currencyOptions = currenciesList.map((currency) => ({
@@ -115,11 +101,14 @@ const CreatePayment = () => {
   }));
 
   return (
-    <div className="flex items-center justify-center h-screen bg-white flex-col">
+    <div className="flex items-center justify-center bg-white flex-col">
+      <div className="text-center primary-day-darker text-2xl font-bold font-Mulish leading-tight tracking-tight mb-2">
+        Crear pago
+      </div>
+
       <div className="w-[609px] p-8 bg-white rounded-md shadow border border-slate-200 flex-col justify-start items-start gap-8 inline-flex">
-        {/* Importe a pagar */}
         <div className="h-20 flex-col justify-start items-start flex w-full">
-          <label htmlFor="amount" className="text-sky-950 text-sm font-bold font-Mulish leading-tight tracking-tight">
+          <label htmlFor="amount" className="primary-day-darker text-sm font-bold font-Mulish leading-tight tracking-tight">
             Importe a pagar
           </label>
           <input
@@ -132,9 +121,8 @@ const CreatePayment = () => {
           {amountError && <p className="text-red-500 text-sm">{amountError}</p>}
         </div>
 
-        {/* Seleccionar moneda */}
         <div className="self-stretch h-[84px]">
-          <label htmlFor="currency" className="text-sky-950 text-sm font-bold font-Mulish leading-tight tracking-tight">
+          <label htmlFor="currency" className="primary-day-darker text-sm font-bold font-Mulish leading-tight tracking-tight">
             Seleccionar moneda
           </label>
           <Select
@@ -146,9 +134,8 @@ const CreatePayment = () => {
           />
         </div>
 
-        {/* Concepto */}
         <div className="h-20 flex-col justify-start items-start flex w-full">
-          <label htmlFor="concept" className="text-sky-950 text-sm font-bold font-Mulish leading-tight tracking-tight">
+          <label htmlFor="concept" className="primary-day-darker text-sm font-bold font-Mulish leading-tight tracking-tight">
             Concepto
           </label>
           <input
@@ -160,19 +147,21 @@ const CreatePayment = () => {
           />
         </div>
 
-        {/* Continuar button */}
-        <div className="self-stretch h-14 px-6 py-[18px] bg-blue-200 rounded-md flex-col justify-center items-center gap-2.5 flex">
-          <div
-            className={`text-center text-white text-base font-semibold font-Mulish leading-tight cursor-pointer ${!amount || !selectedCurrency || !concept ? 'opacity-50 pointer-events-none' : ''
-              }`}
-            onClick={handleContinue}
-            disabled={!amount || !selectedCurrency || !concept}
-          >
-            Continuar
-          </div>
+        <div className="bg-primary-day-darker self-stretch h-14 px-6 py-[18px] rounded-md flex-col justify-center items-center gap-2.5 flex">
+          {isLoading ? (
+            <ClipLoader color="#C0CCDA"
+             loading={true} size={20} />
+            ) : (
+            <button
+              className={`text-center text-white text-base font-semibold font-Mulish leading-tight cursor-pointer`}
+              onClick={handleContinue}
+              disabled={!amount || !selectedCurrency || !concept}
+            >
+              Continuar
+            </button>
+          )}
         </div>
       </div>
-      <Footer />
     </div>
   );
 };

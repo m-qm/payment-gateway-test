@@ -1,240 +1,231 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import QRCodeSection from "../components/QRCodeSection";
 import { ApiService } from "../services";
-import QRCode from "qrcode.react";
 import { deviceId } from "../utils";
+// web3
 
 const Summary = ({
-  amount,
-  selectedCurrency,
-  commerce,
-  transactionDate,
-  content,
-  identifier,
-  paymentUrl,
-  expirationTime,
-  setShowSummary,
-  setPaymentStatus,
-  handlePaymentCompletion
+	amount,
+	selectedCurrency,
+	commerce,
+	transactionDate,
+	content,
+	identifier,
+	paymentUrl,
+	expirationTime,
+	setShowSummary,
+	setPaymentStatus,
+	handlePaymentCompletion,
 }) => {
-  const [remainingTime, setRemainingTime] = useState(expirationTime);
-  const [paymentStatusUpdate, setPaymentStatusUpdate] = useState(null);
-  const [orderInfo, setOrderInfo] = useState(null);
+	const [remainingTime, setRemainingTime] = useState(expirationTime);
+	const [paymentStatusUpdate, setPaymentStatusUpdate] = useState(null);
+	const [orderInfo, setOrderInfo] = useState(null);
+	const [isSmartQRToggled, setSmartQRToggled] = useState(true);
+	const wsEndpoint = `wss://payments.pre-bnvo.com/ws/${identifier}`;
+	const [orders, setOrders] = useState([]);
+	useEffect(() => {
+		const ordersList = async () => {
+			try {
+				const data = await ApiService.getOrders(deviceId);
+				setOrders(data);
+			} catch (error) {
+				console.error("Error fetching orders:", error);
+			}
+		};
+		ordersList();
+	}, []);
 
-  // debugging purposes only
-  const [orders, setOrders] = useState(null);
+	useEffect(() => {
+		const fetchOrderInfo = async () => {
+			try {
+				const data = await ApiService.getOrderInfo(deviceId, identifier);
+				setOrderInfo(data[0]);
+			} catch (error) {
+				console.error("Error fetching order info:", error);
+			}
+		};
+		fetchOrderInfo();
+	}, [deviceId, identifier]);
 
-  const [isSmartQRToggled, setSmartQRToggled] = useState(true);
+	useEffect(() => {
+		const socket = new WebSocket(wsEndpoint);
 
-  const wsEndpoint = `wss://payments.pre-bnvo.com/ws/${identifier}`;
+		socket.onopen = () => {
+			console.log("WebSocket connection established");
+		};
 
-  useEffect(() => {
-    const ordersList = async () => {
-      await ApiService.getOrders(deviceId).then(data => {
-        setOrders(data);
-      });
-    };
-    ordersList();
-  }, []);
+		socket.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			console.log("WebSocket message received:", data);
 
-  // fetch order info
+			if (data.identifier === identifier) {
+				setPaymentStatusUpdate(data.status);
+				if (data.status === "CO") {
+					handlePaymentCompletion();
+					setPaymentStatus(data.status);
+				}
+				if (data.status === "EX") {
+					setShowSummary(false);
+				}
+			}
+		};
 
-  useEffect(() => {
-    const orderInfo = async () => {
-      await ApiService.getOrderInfo(deviceId, identifier).then(data => {
-        setOrderInfo(data[0]);
-      });
-    };
-    orderInfo();
-  }
-    , [deviceId, identifier]);
+		socket.onerror = (error) => {
+			console.error("WebSocket error:", error);
+		};
 
+		socket.onclose = (event) => {
+			console.log("WebSocket connection closed:", event);
+		};
 
-  // connect to websocket
+		return () => {
+			socket.close();
+		};
+	}, [
+		wsEndpoint,
+		identifier,
+		setShowSummary,
+		setPaymentStatus,
+		handlePaymentCompletion,
+	]);
 
-  useEffect(() => {
-    const socket = new WebSocket(wsEndpoint);
+	useEffect(() => {
+		if (paymentStatusUpdate) {
+			setPaymentStatus(paymentStatusUpdate);
+		}
+	}, [paymentStatusUpdate, setPaymentStatus]);
 
-    socket.onopen = () => {
-      console.log("WebSocket connection established");
-    };
+	useEffect(() => {
+		const intervalId = setInterval(() => {
+			setRemainingTime((prevTime) => (prevTime > 0 ? prevTime - 1 : 0));
+		}, 1000);
 
-    socket.onmessage = event => {
-      const data = JSON.parse(event.data);
+		return () => clearInterval(intervalId);
+	}, []);
 
-      console.log("WebSocket message received:", data);
-
-
-      if (data.identifier === identifier) {
-        setPaymentStatusUpdate(data.status);
-        // Render completed payment page when payment is completed
-        if (data.status === "CO") {
-          handlePaymentCompletion();
-          // update payment status
-          setPaymentStatus(data.status);
-        }
-        // handle expired payment
-        if (data.status === "EX") {
-          setShowSummary(false);
-        }
-      }
-    };
-
-
-    socket.onerror = error => {
-      console.error("WebSocket error:", error);
-    };
-
-    socket.onclose = event => {
-      console.log("WebSocket connection closed:", event);
-    };
-
-    return () => {
-      socket.close();
-    };
-  }, [wsEndpoint, identifier, setShowSummary, setPaymentStatus]);
-
-  // Update payment status when paymentStatusUpdate changes
-
-  useEffect(() => {
-    if (paymentStatusUpdate) {
-      setPaymentStatus(paymentStatusUpdate);
-    }
-  }, [paymentStatusUpdate, setPaymentStatus]);
-
-  const toggleSmartQR = () => {
-    setSmartQRToggled(!isSmartQRToggled);
-  };
-
-
-  useEffect(() => {
-    // Update remaining time every second
-    const intervalId = setInterval(() => {
-      setRemainingTime(prevTime => (prevTime > 0 ? prevTime - 1 : 0));
-    }, 1000);
-
-    // Cleanup interval on component unmount
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const formatTime = timeInSeconds => {
-    const minutes = Math.floor(timeInSeconds / 60);
-    const seconds = timeInSeconds % 60;
-
-    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
-      2,
-      "0"
-    )}`;
-  };
+	const toggleSmartQR = () => {
+		setSmartQRToggled(!isSmartQRToggled);
+	};
 
 
-  return (
-    <div className="flex items-center justify-center h-screen bg-gray-100 flex-col">
-      <div className="grid grid-cols-2 w-full max-w-2xl p-8 bg-white rounded-2xl shadow border border-neutral-100 gap-8">
-        <div className="flex flex-col gap-4">
 
-          <div className="text-sky-950 text-3xl font-bold font-'Mulish' leading-[38px]">
-            Resumen del pedido
-          </div>
+	return (
+		<div className="w-full mx-auto flex items-center justify-center h-screen bg-white flex-col"
+			style={
+				{ maxWidth: "800px"}
+			}
+		>
+			<div className="w-full flex flex-row gap-6">
+				<div className="w-full p-8 bg-white rounded-md flex-col justify-start items-start gap-8 inline-flex">
+					<div className="w-full flex-col gap-2 justify-between">
+						<div className="primary-day-darker text-2xl font-bold font-Mulish leading-tight tracking-tight mb-2">
+							Resumen del pedido
+						</div>
+						<div className="w-full flex flex-col primary-day-darker">
+							<div className="flex flex-col gap-2 justify-between">
+								<div
+									className="flex flex-row items-center"
+									style={{
+										padding: "0.5rem 0",
+									}}
+								>
+									<div className=" primary-day-darker text-m w-full">
+										Importe
+									</div>
+										<p className="primary-day-darker  font-bold text-m" style={
+											{
+												width: "100%",
+												justifyContent: "flex-end",
+												display: "flex",
+											}
+										}>
+											{amount} {selectedCurrency} 2
+										</p>
+								</div>
+							</div>
+							<div
+								className="flex flex-row items-center"
+								style={{
+									padding: "0.5rem 0",
+								}}
+							>
+								<div className="  text-m w-full">Comercio</div>
+								<div>
+									<p className="primary-day-darker  font-bold text-m" style={
+										{
+											width: "100%",
+											justifyContent: "flex-end",
+											display: "flex",
+											textAlign: "end",
+										}
+									}>
+										{commerce}
+									</p>
+								</div>
+							</div>
+							<div
+								className="flex flex-row items-center"
+								style={{
+									padding: "0.5rem 0",
+								}}
+							>
+								<div className="  text-m w-full">Fecha</div>
+								<div>
+									<p className="primary-day-darker  font-bold text-m" style={
+										{
+											width: "100%",
+											justifyContent: "flex-end",
+											display: "flex",
+											textAlign: "end",
+										}
+									}>
+										{transactionDate}
+									</p>
+								</div>
+							</div>
+							<div
+								className="flex flex-row items-center"
+								style={{
+									padding: "0.5rem 0",
+								}}
+							>
+								<div className="  text-m w-full">Contenido</div>
+								<div
+								>
+									<p className="primary-day-darker  font-bold text-m" style={
+										{
+											width: "100%",
+											justifyContent: "flex-end",
+											display: "flex",
+											textAlign: "end",
+										}
+									}>
+										{content}
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
 
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-4">
-              <div className="font-bold">Amount in Euros:</div>
-              <div>
-                {amount}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="font-bold">Selected Coin:</div>
-              <div>
-                {selectedCurrency}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="font-bold">Commerce:</div>
-              <div>
-                {commerce}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="font-bold">Transaction Date:</div>
-              <div>
-                {transactionDate}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="font-bold">Content:</div>
-              <div>
-                {content}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-4">
-              <div className="flex gap-4">
-                <div className="font-bold">Remaining Time:</div>
-                <div>
-                  {formatTime(remainingTime)}
-                </div>
-              </div>
-
-              {/* Display payment status */}
-              <div className="flex gap-4">
-                <div className="font-bold">Payment Status:</div>
-                <div>
-                  {paymentStatusUpdate || orderInfo?.status}
-                </div>
-              </div>
-
-              {/* Add Smart QR / Web3 toggle component from tailwind */}
-
-              <div className="flex gap-4">
-                <div className="font-bold">Toggle Smart QR / Web3:</div>
-                <button
-                  onClick={toggleSmartQR}
-                  className={`px-4 py-2 rounded-md ${isSmartQRToggled ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-700'}`}
-                >
-                  {isSmartQRToggled ? 'Smart QR' : 'Web3'}
-                </button>
-              </div>
-
-              {isSmartQRToggled ? (
-                <div className="flex gap-4">
-                  <div className="font-bold">Smart QR:</div>
-                  <div>
-                    <QRCode value={paymentUrl} />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex gap-4">
-                  <div className="font-bold">Web3:</div>
-                  <div>
-                    {wsEndpoint}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <div className="text-sm text-gray-500">
-                  Enviar {orderInfo?.crypto_amount} {orderInfo?.input_currency}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {orderInfo?.address}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {orderInfo?.tag_memo}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <div className="font-bold">Web3:</div>
-              <div>
-                {wsEndpoint}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+				<div className="w-full flex flex-row gap-6 flex-col justify-start items-start gap-6 inline-flex">
+					<div className="p-8 bg-white rounded-2xl flex-col justify-between items-start flex">
+						<div className="text-center primary-day-darker text-2xl font-bold font-Mulish leading-tight tracking-tight mb-2">
+							Realiza el pago
+						</div>
+						<QRCodeSection
+							remainingTime={remainingTime}
+							isSmartQRToggled={isSmartQRToggled}
+							toggleSmartQR={toggleSmartQR}
+							paymentUrl={paymentUrl}
+							orderInfo={orderInfo}
+							wsEndpoint={wsEndpoint}
+						/>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
 };
 
 export default Summary;

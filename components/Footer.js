@@ -2,7 +2,7 @@
 
 const Footer = () => {
     return (
-      <div className="w-[399px] justify-start items-center gap-2 flex flex-row">
+      <div className="w-100 justify-start items-center gap-2 flex flex-row">
         <div className="w-[164px] relative">
           <img className="w-[26px] left-[56px] top-0 absolute" src="/assets/footer.jpg" alt="Logo" />
         </div>

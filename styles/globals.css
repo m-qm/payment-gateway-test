@@ -1,3 +1,21 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+@import '@fortawesome/fontawesome-free/css/all.css';
+
+
+
+/* Path: styles/globals.css */
+/* add color palette */
+
+.text-slate-300 {
+    color: #C0CCDA;
+}
+
+.primary-day-darker {
+    color: #002859;
+}
+
+.bg-primary-day-darker {
+    background-color: #002859;
+}
