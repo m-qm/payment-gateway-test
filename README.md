@@ -22,7 +22,7 @@ This project demonstrates the integration of a payment gateway using Next.js. It
 
 ### Currency Choice: Ripple (XRP) vs. MetaMask
 
-The decision to implement Ripple (XRP) instead of MetaMask was driven by [specific considerations]:
+The decision to implement Ripple (XRP) instead of MetaMask was driven by:
 
 1. **Ripple Integration:** The project leverages Ripple (XRP) for payment processing. Ripple provides a fast and cost-effective cross-border payment solution with a focus on real-time gross settlement.
 
